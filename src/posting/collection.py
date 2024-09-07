@@ -45,6 +45,9 @@ class Auth(BaseModel):
         elif self.type == "digest":
             assert self.digest is not None
             return httpx.DigestAuth(self.digest.username, self.digest.password)
+        elif self.type == "bearer":
+            assert self.bearer is not None
+            return httpx.BearerAuth(self.bearer.token)
         return None
 
 
@@ -56,6 +59,10 @@ class BasicAuth(BaseModel):
 class DigestAuth(BaseModel):
     username: str = Field(default="")
     password: str = Field(default="")
+
+
+class BearerAuth(BaseModel):
+    token: str = Field(default="")
 
 
 class Header(BaseModel):

@@ -6,7 +6,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import ContentSwitcher, Input, Label, Select, Static
 
-from posting.collection import Auth, BasicAuth, DigestAuth
+from posting.collection import Auth, BasicAuth, BearerAuth, DigestAuth
 from posting.widgets.select import PostingSelect
 from posting.widgets.variable_input import VariableInput
 
@@ -52,6 +52,33 @@ class UserNamePasswordForm(Vertical):
         }
 
 
+class TokenForm(Vertical):
+    DEFAULT_CSS = """
+    TokenForm {
+        padding: 1 0;
+
+        & #token-input {
+            margin-bottom: 1;
+        }
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        yield Label("Token")
+        yield VariableInput(
+            placeholder="Enter a token",
+            id="token-input",
+        )
+
+    def set_values(self, token: str) -> None:
+        self.query_one("#token-input", Input).value = token
+
+    def get_values(self) -> dict[str, str]:
+        return {
+            "token": self.query_one("#token-input", Input).value,
+        }
+
+
 class RequestAuth(VerticalScroll):
     DEFAULT_CSS = """
     RequestAuth {
@@ -93,6 +120,7 @@ class RequestAuth(VerticalScroll):
                         ("No Auth", None),
                         ("Basic", "basic"),
                         ("Digest", "digest"),
+                        ("Bearer", "bearer"),
                     ],
                     allow_blank=False,
                     prompt="Auth Type",
@@ -107,6 +135,7 @@ class RequestAuth(VerticalScroll):
         with ContentSwitcher(initial=None, id="auth-form-switcher"):
             yield UserNamePasswordForm(id="auth-form-basic")
             yield UserNamePasswordForm(id="auth-form-digest")
+            yield TokenForm(id="auth-form-bearer")
 
     @on(Select.Changed, selector="#auth-type-select")
     def on_auth_type_changed(self, event: Select.Changed):
@@ -123,6 +152,8 @@ class RequestAuth(VerticalScroll):
                 return httpx.BasicAuth(**form.get_values())
             case "auth-form-digest":
                 return httpx.DigestAuth(**form.get_values())
+            case "auth-form-bearer":
+                return httpx.BearerAuth(**form.get_values())
             case _:
                 return None
 
@@ -146,6 +177,13 @@ class RequestAuth(VerticalScroll):
                 return Auth(
                     type="digest",
                     digest=DigestAuth(username=username, password=password),
+                )
+            case "auth-form-bearer":
+                form_values = form.get_values()
+                token = form_values["token"]
+                return Auth(
+                    type="bearer",
+                    bearer=BearerAuth(token=token),
                 )
             case _:
                 return None
@@ -176,6 +214,16 @@ class RequestAuth(VerticalScroll):
                 self.query_one("#auth-form-digest", UserNamePasswordForm).set_values(
                     auth.digest.username,
                     auth.digest.password,
+                )
+            case "bearer":
+                if auth.bearer is None:
+                    log.warning(
+                        "Bearer auth selected, but no values provided for token."
+                    )
+                    return
+                self.query_one("#auth-type-select", Select).value = "bearer"
+                self.query_one("#auth-form-bearer", UserNamePasswordForm).set_values(
+                    auth.bearer.token,
                 )
             case _:
                 log.warning(f"Unknown auth type: {auth.type}")
